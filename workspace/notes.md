@@ -15,9 +15,13 @@ https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&sta
 Test:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2025-01-01&end_date=2025-05-19&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
 
+
+holdout ratios explain
 Run grid search on a 0.1 reduction and see if it is the same
 Final holdout evaluation
-Another 10-20 epochs?
+shap better evaluation
+
+
 How does the current model work?
 
 I have a task to predict the number of bicycles for 4x 1 hour after a 48 hour sequence. The training data is 2 year worth of such sequences. Each station also has metadata
