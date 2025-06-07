@@ -9,6 +9,45 @@ LSTM
 LSTM shared
 hidden_dim=128, dropout=0.1, lr=0.001, weight_decay=1e-05
 
+TCN
+hidden_dim=256, dropout=0.5, lr=0.001, weight_decay=0.001
+
+Better shuffled ker je bolje generaliziral ...
+Na ne shuffled je blo ful tezje najdt hiperparametre k bi za cel dataset delovali ... ker overfitting.
+It just let it run for longer since it was not as unpredictable
+
+HISTORY_LEN = 48
+PRED_HORIZON = 4
+K_NEIGHBORS = 2
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+EMBED_DIM = 8
+
+HIDDEN_DIM = 64
+N_LAYERS = 4
+LR = 0.0005
+WEIGHT_DECAY = 0.0001
+DROPOUT = 0.2
+
+EPOCHS = 50
+PATIENCE = 8
+BATCH_SIZE = 128
+
+
+HISTORY_LEN = 48
+PRED_HORIZON = 4
+K_NEIGHBORS = 2
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+EMBED_DIM = 8
+HIDDEN_DIM = 64
+N_LAYERS = 4
+LR = 0.0005
+WEIGHT_DECAY = 0.0001
+DROPOUT = 0.2
+EPOCHS = 50
+PATIENCE = 8
+BATCH_SIZE = 128
+
+
 Train:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2022-09-01&end_date=2024-12-31&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
 
