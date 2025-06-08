@@ -9,9 +9,6 @@ LSTM
 LSTM shared
 hidden_dim=128, dropout=0.1, lr=0.001, weight_decay=1e-05
 
-TCN
-hidden_dim=256, dropout=0.5, lr=0.001, weight_decay=0.001
-
 Better shuffled ker je bolje generaliziral ...
 Na ne shuffled je blo ful tezje najdt hiperparametre k bi za cel dataset delovali ... ker overfitting.
 It just let it run for longer since it was not as unpredictable
@@ -55,13 +52,40 @@ Test:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2025-01-01&end_date=2025-05-19&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
 
 
-holdout ratios explain
-Run grid search on a 0.1 reduction and see if it is the same
 Final holdout evaluation
 shap better evaluation
-
-
+data graphs
 How does the current model work?
+stride => step
+
+-------- it scales! ----
+Train samples: 4312 | Val samples: 79
+Train samples: 362208 | Val samples: 6636
+⏳ Running grid search over 1 combinations...
+
+🔍 Combo 1: hidden_dim=64, dropout=0.2, lr=0.0005, weight_decay=0.0001
+Holdout MSE (real units): 9.575816242372822
+
+📊 Top 5 Results:
+   hidden_dim  dropout      lr  weight_decay  val_loss  holdout_loss
+0          64      0.2  0.0005        0.0001  0.279257      9.575816
+
+
+hidden_dim=64, dropout=0.4, lr=0.001, weight_decay=0.0?
+Train samples: 4312 | Val samples: 79
+Train samples: 362208 | Val samples: 6636
+⏳ Running grid search over 1 combinations...
+
+🔍 Combo 1: hidden_dim=64, dropout=0.4, lr=0.001, weight_decay=0.0
+Holdout MSE (real units): 9.195802937395635
+
+📊 Top 5 Results:
+   hidden_dim  dropout     lr  weight_decay  val_loss  holdout_loss
+0          64      0.4  0.001           0.0  0.284409      9.195803
+vs 256 vs prev on less reduction
+Run grid search on a 0.1 reduction and see if it is the same
+-----------
+
 
 I have a task to predict the number of bicycles for 4x 1 hour after a 48 hour sequence. The training data is 2 year worth of such sequences. Each station also has metadata
 
