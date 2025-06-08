@@ -1,35 +1,4 @@
 # TODO:
-✅ Best config for LIDL BEŽIGRAD: {'hidden_dim': 32, 'dropout': 0.25, 'learning_rate': 0.001, 'weight_decay': 1e-05, 'batch_size': 32}
-
-'hidden_dim': 32, 'dropout': 0.20, 'learning_rate': 0.001, 'weight_decay': 1e-05, 'batch_size': 32
-
-LSTM
-'hidden_dim': 32, 'dropout': 0.3, 'lr': 0.001, 'weight_decay': 1e-05, 'batch_size': 64
-
-LSTM shared
-hidden_dim=128, dropout=0.1, lr=0.001, weight_decay=1e-05
-
-Better shuffled ker je bolje generaliziral ...
-Na ne shuffled je blo ful tezje najdt hiperparametre k bi za cel dataset delovali ... ker overfitting.
-It just let it run for longer since it was not as unpredictable
-
-HISTORY_LEN = 48
-PRED_HORIZON = 4
-K_NEIGHBORS = 2
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-EMBED_DIM = 8
-
-HIDDEN_DIM = 64
-N_LAYERS = 4
-LR = 0.0005
-WEIGHT_DECAY = 0.0001
-DROPOUT = 0.2
-
-EPOCHS = 50
-PATIENCE = 8
-BATCH_SIZE = 128
-
-
 HISTORY_LEN = 48
 PRED_HORIZON = 4
 K_NEIGHBORS = 2
@@ -43,7 +12,6 @@ DROPOUT = 0.2
 EPOCHS = 50
 PATIENCE = 8
 BATCH_SIZE = 128
-
 
 Train:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2022-09-01&end_date=2024-12-31&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
@@ -51,25 +19,28 @@ https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&sta
 Test:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2025-01-01&end_date=2025-05-19&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
 
-
-Final holdout evaluation
 shap better evaluation
 data graphs
-How does the current model work?
+How does it test?
 stride => step
 
--------- it scales! ----
-Train samples: 4312 | Val samples: 79
-Train samples: 362208 | Val samples: 6636
-⏳ Running grid search over 1 combinations...
-
-🔍 Combo 1: hidden_dim=64, dropout=0.2, lr=0.0005, weight_decay=0.0001
-Holdout MSE (real units): 9.575816242372822
 
 📊 Top 5 Results:
-   hidden_dim  dropout      lr  weight_decay  val_loss  holdout_loss
-0          64      0.2  0.0005        0.0001  0.279257      9.575816
+    hidden_dim  dropout      lr  weight_decay  batch_size  val_loss  \
+19          64      0.2  0.0010        0.0001          64  0.309060   
+18          64      0.4  0.0005        0.0001         256  0.307775   
+13          64      0.4  0.0010        0.0001         128  0.306010   
+10          64      0.4  0.0010        0.0000          64  0.307754   
+5           64      0.2  0.0010        0.0001          32  0.302331   
 
+    holdout_loss  
+19     10.138661  
+18     10.177680  
+13     10.206712  
+10     10.221721  
+5      10.228167
+
+Holdout MSE (unnormalized, real units): 9.4291
 
 hidden_dim=64, dropout=0.4, lr=0.001, weight_decay=0.0?
 Train samples: 4312 | Val samples: 79
@@ -111,3 +82,159 @@ timestamp,LIDL BEŽIGRAD,ŠMARTINSKI PARK,SAVSKO NASELJE 1-ŠMARTINSKA CESTA,ČR
 
 the test set is the same format as train just that 4 hours are missing after 48 hour sequences. These i need to predict. For this task i can use at most pytorch and its dependencies and scikit learn. I had by far the best result with per station lightgbm, however i cannot use it as it is external library. The second best, but still not that good is lstm, which was better as shared model rather than per station. MLP instead of lstm was not better. I also learned that stations are very weakly correlated regarding spatialy, however if the range is <1km they indeed are quite correlated. What else can i explore? What is the next promising thing to try? The following is the best model with best features
 
+
+
+           ┌───────────────────────────────┐
+           │   Bicikelj Data (per station) │
+           │    - time series per station  │
+           │   Weather Data                │
+           └───────┬───────────┬───────────┘
+                   │           │
+    ┌──────────────┘           └───────────────┐
+    │                                         │
+    ▼                                         ▼
+[Neighbor Selection]                   [Timestamp → Features]
+  - For each station,                  - hour_sin/cos
+    find K nearest                     - dow_sin/cos
+    neighbors (by                      - month_sin/cos
+    Haversine)                         - is_weekend, is_holiday
+                                       - Weather features
+    │                                         │
+    └─────────────┬─────────────┬─────────────┘
+                  │             │
+                  ▼             ▼
+   ┌────────────────────────────────────────────┐
+   │ For each sample window:                    │
+   │  - Main station time series (HISTORY_LEN)  │
+   │  - Neighbor station series (HISTORY_LEN)   │
+   │  - Time features + weather (HISTORY_LEN)   │
+   └────────────────────────────────────────────┘
+                  │
+                  ▼
+     ┌──────────────────────────────────────────┐
+     │   X: [history_len, num_features]         │
+     │   Station ID                             │
+     └──────────────────┬───────────────────────┘
+                        │
+                        ▼
+                ┌─────────────────────┐
+                │   Shared TCN Block  │
+                │ (Temporal Conv Net) │
+                └─────────┬───────────┘
+                          │
+                   Last TCN output
+                          │
+                ┌─────────▼─────────────┐
+                │ Station Embedding     │
+                │ (lookup by Station ID)│
+                └─────────┬─────────────┘
+                          │
+            ┌─────────────▼──────────────┐
+            │   Concatenate:             │
+            │   - TCN output             │
+            │   - Station Embedding      │
+            └─────────────┬──────────────┘
+                          │
+                          ▼
+                 ┌─────────────────────────────┐
+                 │  MLP Output Head            │
+                 │  - Linear+ReLU              │
+                 │  - Linear                   │
+                 │  (Dropout in between)       │
+                 │  - Final Linear             │
+                 └─────────────┬───────────────┘
+                               │
+                               ▼
+         ┌────────────────────────────┐
+         │   Output: predicted bikes │
+         │    for next PRED_HORIZON  │
+         │         time steps        │
+         └───────────────────────────┘
+
+
+
+Input: X [B, C_in, L]
+(batch size, input channels, sequence length)
+   │
+  ┌───────▼─────────────┐
+  │ Conv1d Layer 1 │
+  │ (C_in → C_out) │
+  │ Kernel size=k, │
+  │ Padding, Dilation   │
+  └───────┬─────────────┘
+   │
+    Remove trailing padding
+   │
+  ┌───────▼─────────┐
+  │   ReLU   │
+  └───────┬─────────┘
+   │
+  ┌───────▼─────────┐
+  │  Dropout │
+  └───────┬─────────┘
+   │
+  ┌───────▼─────────────┐
+  │ Conv1d Layer 2 │
+  │ (C_out → C_out)│
+  │ Kernel size=k, │
+  │ Padding, Dilation   │
+  └───────┬─────────────┘
+   │
+    Remove trailing padding
+   │
+  ┌───────▼─────────┐
+  │   ReLU   │
+  └───────┬─────────┘
+   │
+  ┌───────▼─────────┐
+  │  Dropout │
+  └───────┬─────────┘
+   │
+┌───────────▼─────────────┐
+│    Residual Connection  │
+│  (optionally via 1x1    │
+│   Conv if C_in ≠ C_out) │
+└───────────┬─────────────┘
+   │
+    Add elementwise
+   │
+ Output: Y [B, C_out, L]
+
+Temporal Block (TCN)
+Input: X [B, F, H]
+(batch size, input channels, sequence length)
+
+Conv1d Layer 1
+ReLU
+Dropout
+Conv1d Layer 2
+ReLU
+Dropout
+Residual Connection
+
+Output: Y [B, C_out, L]
+----------------
+repeated 4x
+Output: [B, C4, H] -> [B, C4] (taking the last time step)
+
+
+Validation:
+
+Hyperparameter tuning was done with grid search, on 
+param_grid = {
+    'hidden_dim':   [64, 128],
+    'dropout':      [0.2, 0.4],
+    'lr':           [0.001, 0.0005],
+    'weight_decay': [0.0, 0.0001],
+    'batch_size':   [32, 64, 128, 256]
+}
+
+Sampled randomly 20 times. 
+
+With nabor1 learning is quite unstable, however because of low batchsize persumably?? TODO:, the model better escapes local minima, so the best score of all time on the final leaderboard was obtained using these hyperparameters and trained on only train/val in 0.9:0.1 ratio compared to train/val/holdout with 0.8:0.1:0.1 ratio.
+
+However the most stable set of hyperparameters with around 0.08 higher final mse, is nabor2.
+
+The model was locally evaluated on nabor2 set of hyperparameters on a holdout set, giving
+Holdout MSE: 9.4291 on 40 sequences (2080 timestamps, 160 predictions)
+Leaderboard MSE (9.3670)
