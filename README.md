@@ -7,8 +7,8 @@
 - ```requirements.txt``` datoteka s potrebnimi knjižnicami 
 - ```tcn_model.pt``` streniran tcn model
 
-## Zagon vizualizacije in vzpostavitev okolja
-Vizualizacija je namenjena zagonu v `python 3.12`. Knjižnice, ki so potrebne za zagon namestimo z
+## Vzpostavitev okolja
+Skripta za zagon modela je namenjena zagonu v `python 3.12`. Knjižnice, ki so potrebne za zagon namestimo z
 ```bash
 pip install -r requirements.txt
 ```
