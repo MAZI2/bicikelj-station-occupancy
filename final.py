@@ -10,25 +10,6 @@ from tqdm import tqdm
 import os
 import random
 
-# Set global seed for reproducibility
-SEED = 40
-
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
-# For CUDA, if you use it
-torch.cuda.manual_seed(SEED)
-torch.cuda.manual_seed_all(SEED)
-
-# PyTorch deterministic settings (for complete reproducibility, can slow down training)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-
-# Optional: set PYTHONHASHSEED for Python's hash-based operations (e.g., shuffling dict keys)
-os.environ["PYTHONHASHSEED"] = str(SEED)
-
-# --- Constants & Config ---
 HISTORY_LEN = 48
 PRED_HORIZON = 4
 K_NEIGHBORS = 2
@@ -44,34 +25,24 @@ PATIENCE = 8
 BATCH_SIZE = 128
 VAL_FRAC = 0.2
 STRIDE = 1
-MODEL_PATH = "tcn_model_final_with_stats.pt"
+MODEL_PATH = "tcn_model.pt"
 WEATHER_FEATURES = ['temperature_2m', 'precipitation', 'windspeed_10m', 'cloudcover']
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# --- Dataset ---
 class SharedTCNDataset(Dataset):
     def __init__(self, df, station_cols, neighbors, history_len, pred_horizon, weather_features, sample_indices):
         self.samples = []
         self.station_to_idx = {name: i for i, name in enumerate(station_cols)}
+        
         timestamps = pd.to_datetime(df['timestamp'])
-        hour_sin = np.sin(2 * np.pi * timestamps.dt.hour / 24)
-        hour_cos = np.cos(2 * np.pi * timestamps.dt.hour / 24)
-        dow_sin = np.sin(2 * np.pi * timestamps.dt.dayofweek / 7)
-        dow_cos = np.cos(2 * np.pi * timestamps.dt.dayofweek / 7)
-        month_sin = np.sin(2 * np.pi * timestamps.dt.month / 12)
-        month_cos = np.cos(2 * np.pi * timestamps.dt.month / 12)
-        is_weekend = (timestamps.dt.dayofweek >= 5).astype(float)
-        slo_holidays = holidays.Slovenia()
-        is_holiday = timestamps.dt.date.astype(str).isin([str(d) for d in slo_holidays]).astype(float)
-        weather_array = df[weather_features].values
-        time_feats = np.concatenate([
-            np.stack([hour_sin, hour_cos, dow_sin, dow_cos,
-                      month_sin, month_cos, is_weekend, is_holiday], axis=1),
-            weather_array
-        ], axis=1)
+        time_feats = compute_time_features(timestamps)
+
+        weather_array = df[weather_features].values.astype(np.float32)
+        time_feats = np.concatenate([time_feats, weather_array], axis=1)
+
         bikes = df[station_cols].values.astype(np.float32)
-        N = len(df)
+
         for s_name in station_cols:
             s_idx = self.station_to_idx[s_name]
             nn_idx = [self.station_to_idx[nn] for nn in neighbors[s_name]]
@@ -89,7 +60,6 @@ class SharedTCNDataset(Dataset):
                 torch.tensor(y, dtype=torch.float32),
                 torch.tensor(sid, dtype=torch.long))
 
-# --- Model ---
 class TemporalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, dilation, dropout):
         super().__init__()
@@ -131,6 +101,7 @@ class TCN(nn.Module):
             nn.ReLU(),
             nn.Linear(64, output_size)
         )
+
     def forward(self, x, station_id):
         x = x.permute(0, 2, 1)
         tcn_out = self.tcn(x)[:, :, -1]
@@ -138,7 +109,8 @@ class TCN(nn.Module):
         combined = torch.cat([tcn_out, emb], dim=1)
         return self.head(combined)
 
-# --- Utility Functions ---
+
+# 
 def load_and_clean_bikes(filename):
     df = pd.read_csv(filename)
     station_cols = df.columns[1:]
@@ -167,6 +139,7 @@ def calc_neighbors(meta_csv, k=K_NEIGHBORS):
     meta = pd.read_csv(meta_csv)
     coords = np.deg2rad(meta[['latitude', 'longitude']].values)
     station_names = meta['name'].tolist()
+    # * earth radius = kilometers
     dists = haversine_distances(coords, coords) * 6371
     neighbors = {}
     for i, name in enumerate(station_names):
@@ -183,18 +156,19 @@ def make_sample_indices(mask, history_len, pred_horizon, stride=1):
             indices.append(i)
     return indices
 
-def compute_time_features(timestamps, slo_holidays=None):
+def compute_time_features(timestamps):
     hour_sin = np.sin(2 * np.pi * timestamps.dt.hour / 24)
     hour_cos = np.cos(2 * np.pi * timestamps.dt.hour / 24)
     dow_sin = np.sin(2 * np.pi * timestamps.dt.dayofweek / 7)
     dow_cos = np.cos(2 * np.pi * timestamps.dt.dayofweek / 7)
     month_sin = np.sin(2 * np.pi * timestamps.dt.month / 12)
-    month_cos = np.cos(2 * np.pi * timestamps.dt.month / 12)
+    month_cos = np.sin(2 * np.pi * timestamps.dt.month / 12)
     is_weekend = (timestamps.dt.dayofweek >= 5).astype(float)
-    if slo_holidays is None:
-        slo_holidays = holidays.Slovenia()
+    slo_holidays = holidays.Slovenia()
     is_holiday = timestamps.dt.date.astype(str).isin([str(d) for d in slo_holidays]).astype(float)
-    time_feats = np.stack([hour_sin, hour_cos, dow_sin, dow_cos, month_sin, month_cos, is_weekend, is_holiday], axis=1)
+
+    time_feats = np.stack([hour_sin, hour_cos, dow_sin, dow_cos,
+                        month_sin, month_cos, is_weekend, is_holiday], axis=1)
     return time_feats
 
 # --- Train ---
@@ -207,7 +181,6 @@ def train_main():
 
     # Validation split (non-overlapping blocks)
     BLOCK_SIZE = HISTORY_LEN + PRED_HORIZON
-    #np.random.seed(42)
     all_possible_starts = np.arange(0, N - BLOCK_SIZE + 1)
     val_mask = np.zeros(N, dtype=bool)
     val_starts = []
@@ -292,52 +265,57 @@ def train_main():
         'weather_means': weather_means,
         'weather_stds': weather_stds
     }, MODEL_PATH)
-    print(f"✅ Saved model to '{MODEL_PATH}'")
+    print(f"Saved model to '{MODEL_PATH}'")
 
 # --- Predict ---
 def predict_main():
-    print("🚲 Prediction mode")
-    # --- Load test and train stats for normalization ---
-    df, station_cols = load_and_clean_bikes("data/bicikelj_train.csv")
-    weather_train_df = load_weather("data/weather_ljubljana.csv")
-    df_merged = merge_weather(df, weather_train_df)
-    df_merged[WEATHER_FEATURES] = df_merged[WEATHER_FEATURES].ffill().bfill()
-    station_means = df_merged[station_cols].mean()
-    station_stds = df_merged[station_cols].std().replace(0, 1)
-    weather_means = df_merged[WEATHER_FEATURES].mean()
-    weather_stds = df_merged[WEATHER_FEATURES].std().replace(0, 1)
+    _, station_cols = load_and_clean_bikes("data/bicikelj_train.csv")
     neighbors = calc_neighbors("data/bicikelj_metadata.csv", K_NEIGHBORS)
-    name_to_idx = {name: i for i, name in enumerate(station_cols)}
-
+    
     # Load model and normalization
     checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
     input_size = 1 + K_NEIGHBORS + (8 + len(WEATHER_FEATURES))
-    model = TCN(input_size, PRED_HORIZON, [HIDDEN_DIM] * N_LAYERS, 3, DROPOUT,
-                num_stations=len(station_cols), embed_dim=EMBED_DIM).to(DEVICE)
+
+    model = TCN(input_size, 
+                PRED_HORIZON, 
+                [HIDDEN_DIM] * N_LAYERS, 
+                3, 
+                DROPOUT,
+                num_stations=len(station_cols), 
+                embed_dim=EMBED_DIM).to(DEVICE)
+    
     model.load_state_dict(checkpoint['model'])
     model.eval()
-    # Use train stats saved with model, if present:
-    station_means = checkpoint.get('station_means', station_means)
-    station_stds = checkpoint.get('station_stds', station_stds)
-    weather_means = checkpoint.get('weather_means', weather_means)
-    weather_stds = checkpoint.get('weather_stds', weather_stds)
 
-    # --- Prepare test set ---
+    station_means = checkpoint.get('station_means')
+    station_stds = checkpoint.get('station_stds')
+    weather_means = checkpoint.get('weather_means')
+    weather_stds = checkpoint.get('weather_stds')
+
+    # Prepare test set
     test_df = pd.read_csv("data/bicikelj_test.csv")
-    station_cols = list(station_means.index)
-
     test_feats = test_df[station_cols].values.astype(np.float32)
     timestamps = pd.to_datetime(test_df["timestamp"])
+    
+    # Weather
     weather_test_df = load_weather("data/weather_ljubljana_test.csv")
     test_df['timestamp'] = pd.to_datetime(test_df['timestamp']).dt.tz_localize(None)
+
+    # Merge
     test_df_merged = merge_weather(test_df, weather_test_df)
     test_df_merged[WEATHER_FEATURES] = test_df_merged[WEATHER_FEATURES].ffill().bfill()
     weather_feats = test_df_merged[WEATHER_FEATURES].values.astype(np.float32)
+
+    # Time features
     time_feats = compute_time_features(timestamps)
+
+    # Normalize
     test_feats_norm = (test_feats - station_means.values) / station_stds.values
     weather_feats_norm = (weather_feats - weather_means.values) / weather_stds.values
 
     pred_matrix = np.full_like(test_feats, np.nan)
+    name_to_idx = {name: i for i, name in enumerate(station_cols)}
+
     with torch.no_grad():
         for i in range(HISTORY_LEN, len(test_df) - PRED_HORIZON + 1):
             # Only predict for rows that are missing all stations (== test target region)
@@ -359,13 +337,14 @@ def predict_main():
                     pred = pred_norm * station_stds[station] + station_means[station]
                     for j in range(PRED_HORIZON):
                         pred_matrix[i + j, s_idx] = pred[j]
+
     # --- Save predictions ---
     pred_df = pd.DataFrame(pred_matrix, columns=station_cols)
     pred_df.insert(0, "timestamp", test_df["timestamp"])
     rows_to_output = test_df[station_cols].isna().all(axis=1)
     pred_df_filtered = pred_df[rows_to_output].copy()
-    pred_df_filtered.to_csv("bicikelj_test_predictions_tcn_weather.csv", index=False)
-    print("✅ Saved predictions to 'bicikelj_test_predictions_tcn_weather.csv'")
+    pred_df_filtered.to_csv("bicikelj_test_predictions.csv", index=False)
+    print("Saved predictions to 'bicikelj_test_predictions.csv'")
 
 # --- Main Entrypoint ---
 def main():

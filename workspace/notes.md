@@ -1,3 +1,20 @@
+# Tried
+STGCN
+
+MLP
+MLP Per station
+MLP T-1
+
+LSTM
+LSTM Per station
+
+LightGBM
+
+Transformer
+
+TCN
+Multiheaded TCN
+
 # TODO:
 HISTORY_LEN = 48
 PRED_HORIZON = 4
@@ -19,10 +36,9 @@ https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&sta
 Test:
 https://archive-api.open-meteo.com/v1/archive?latitude=46.05&longitude=14.51&start_date=2025-01-01&end_date=2025-05-19&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover&timezone=Europe%2FBerlin&format=csv
 
-shap better evaluation
-data graphs
-How does it test?
-stride => step
+How does it predict?
+learned embedding
+holiday embedding?
 
 
 📊 Top 5 Results:
@@ -231,10 +247,50 @@ param_grid = {
 
 Sampled randomly 20 times. 
 
-With nabor1 learning is quite unstable, however because of low batchsize persumably?? TODO:, the model better escapes local minima, so the best score of all time on the final leaderboard was obtained using these hyperparameters and trained on only train/val in 0.9:0.1 ratio compared to train/val/holdout with 0.8:0.1:0.1 ratio.
+Trained on only train/val in 0.9:0.1 ratio compared to train/val/holdout with 0.8:0.1:0.1 ratio.
 
-However the most stable set of hyperparameters with around 0.08 higher final mse, is nabor2.
-
-The model was locally evaluated on nabor2 set of hyperparameters on a holdout set, giving
+The model was locally evaluated on nabor1 set of hyperparameters on a holdout set, giving
 Holdout MSE: 9.4291 on 40 sequences (2080 timestamps, 160 predictions)
-Leaderboard MSE (9.3670)
+Leaderboard MSE (9.2866)
+
+Example of 20 sample top 5
+
+🔍 Combo 6: {'hidden_dim': 64, 'dropout': 0.2, 'lr': 0.001, 'weight_decay': 0.0001, 'batch_size': 32}
+comb5 = [10.51, 10.05, 10.10, 9.90, 10.01, 9.76, 9.82, 9.61, 9.58, 9.61, 9.86, 9.62, 9.52, 9.52, 9.55, 9.39, 9.45, 9.42, 9.39, 9.26, 9.40, 9.31, 9.35, 9.25, 9.42]
+
+Holdout MSE (real units): 10.228166779362223
+
+🔍 Combo 11: {'hidden_dim': 64, 'dropout': 0.4, 'lr': 0.001, 'weight_decay': 0.0, 'batch_size': 64}
+comb4 = [11.14, 10.57, 10.34, 10.22, 10.12, 10.11, 10.02, 9.99, 9.99, 9.81, 10.00, 9.79, 9.73, 9.67, 9.90, 9.61, 9.79, 9.75, 9.65, 9.65, 9.53, 9.47, 9.74, 9.50, 9.68, 9.79, 9.63]
+
+Holdout MSE (real units): 10.221721139799515
+
+🔍 Combo 14: {'hidden_dim': 64, 'dropout': 0.4, 'lr': 0.001, 'weight_decay': 0.0001, 'batch_size': 128}
+comb3 = [11.70, 11.00, 10.49, 10.27, 10.05, 10.01, 9.85, 9.84, 9.65, 9.76, 9.79, 9.63, 9.64, 9.53, 9.53, 9.62, 9.47, 9.55, 9.42, 9.39, 9.58, 9.49, 9.40, 9.40, 9.48, 9.45, 9.45, 9.38]
+
+Holdout MSE (real units): 10.206711903503436
+
+🔍 Combo 19: {'hidden_dim': 64, 'dropout': 0.2, 'lr': 0.0005, 'weight_decay': 0.0001, 'batch_size': 128}
+comb2 = [13.48, 12.15, 11.65, 11.32, 11.13, 10.91, 10.65, 10.52, 10.41, 10.26, 10.25, 10.24, 10.17, 10.15, 10.12, 10.12, 10.07, 9.97, 10.04, 10.01, 10.04, 9.91, 9.88, 9.79, 9.80, 9.80, 9.74, 9.71, 9.66, 9.71, 9.77, 9.66, 9.60, 9.75, 9.61, 9.63, 9.55, 9.59, 9.61, 9.52, 9.69, 9.73, 9.54, 9.49, 9.56, 9.53, 9.57, 9.50, 9.50]
+
+Holdout MSE (real units): 10.177680382835899
+
+🔍 Combo 20: {'hidden_dim': 64, 'dropout': 0.2, 'lr': 0.001, 'weight_decay': 0.0001, 'batch_size': 64}
+comb1 = [10.44, 10.21, 9.94, 10.07, 10.00, 9.86, 9.71, 9.69, 10.06, 9.58, 9.56, 9.55, 9.64, 9.80, 9.50, 9.52, 9.51, 9.49, 9.52, 9.54]
+
+Holdout MSE (real units): 10.13866125728422
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{c|c|c|c|c|c}
+\textbf{Combo} & \textbf{hidden\_dim} & \textbf{dropout} & \textbf{lr} & \textbf{weight\_decay} & \textbf{batch\_size} \\
+\hline
+5 & 64 & 0.2 & 0.001 & 0.0001 & 32 \\
+4 & 64 & 0.4 & 0.001 & 0.0    & 64 \\
+3 & 64 & 0.4 & 0.001 & 0.0001 & 128 \\
+2 & 64 & 0.2 & 0.0005 & 0.0001 & 128 \\
+1 & 64 & 0.2 & 0.001 & 0.0001 & 64 \\
+\end{tabular}
+\caption{Top 5 hyperparameter configurations.}
+\label{tab:top5_configs}
+\end{table}
