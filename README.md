@@ -1,11 +1,3 @@
----
-title: City Bike Station Temporal Prediction (BicikeLj)
-colab:
-date: 2025-06-09
-short: Predict bike availability at BicikeLj stations using temporal, spatial, and weather features with a TCN-based model ensemble.
-long: This project focuses on temporal prediction of bike availability at BicikeLj city bike stations using historical bike counts, station embeddings, nearby station activity, holidays, and weather data...
-image: https://mpog.dev/content/uozp/bicikelj/model.png
----
 ## City Bike Station Temporal Prediction (BicikeLj)
 
 ## Task Description
